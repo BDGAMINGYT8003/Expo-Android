@@ -28,29 +28,45 @@ const ImageViewer = () => {
       const data = await response.json();
       setCategories(data.nsfw);
     } catch (e) {
+      setError('Failed to fetch categories.');
       console.error('Failed to fetch categories', e);
     }
   };
 
   const fetchImage = useCallback(async (category: string) => {
     setIsLoading(true);
-    opacity.value = withTiming(0, { duration: 300 });
-    let url = 'https://api-random.n-sfw.com/nsfw/';
-    if (category === 'all' && categories.length > 0) {
-      const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-      url += randomCategory;
-    } else {
-      url += category;
+    setError(null);
+    opacity.value = withTiming(0, { duration: 200 });
+
+    let endpointCategory = category;
+    if (category === 'all') {
+      if (categories.length === 0) {
+        setError("Categories are not loaded yet. Please wait.");
+        setIsLoading(false);
+        return;
+      }
+      endpointCategory = categories[Math.floor(Math.random() * categories.length)];
     }
+
+    const url = `https://api-random.n-sfw.com/nsfw/${endpointCategory}`;
 
     try {
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API returned error: ${response.status}`);
+      }
       const data = await response.json();
-      setImageUrl(data.url);
-      setError(null);
+
+      if (data && data.url) {
+        setImageUrl(data.url);
+      } else {
+        throw new Error('Invalid data format from API.');
+      }
     } catch (e) {
-      setError('Failed to fetch image');
+      const message = e instanceof Error ? e.message : 'An unknown error occurred.';
+      setError(`Failed to fetch image. ${message}`);
       setImageUrl(null);
+      setIsLoading(false);
     }
   }, [categories, opacity]);
 
@@ -66,7 +82,7 @@ const ImageViewer = () => {
 
   const handleImageLoad = () => {
     setIsLoading(false);
-    opacity.value = withTiming(1, { duration: 300 });
+    opacity.value = withTiming(1, { duration: 500 });
   };
 
   return (
@@ -78,16 +94,25 @@ const ImageViewer = () => {
       />
       <View style={styles.imageContainer}>
         {isLoading && <ActivityIndicator size="large" color="#c7c7c7" style={StyleSheet.absoluteFill} />}
-        {imageUrl && !error ? (
+
+        {imageUrl && !error && (
           <AnimatedImage
             source={{ uri: imageUrl }}
             style={[styles.image, animatedStyle]}
             onLoad={handleImageLoad}
+            onError={() => {
+                setError('Failed to load image from URL.');
+                setIsLoading(false);
+            }}
             contentFit="contain"
             transition={300}
           />
-        ) : (
-          <ThemedText>{error || 'Loading...'}</ThemedText>
+        )}
+
+        {error && !isLoading && (
+          <View style={styles.errorContainer}>
+            <ThemedText style={styles.errorText}>{error}</ThemedText>
+          </View>
         )}
       </View>
       <Button onPress={() => fetchImage(selectedCategory)} title="Next" />
@@ -113,6 +138,18 @@ const styles = StyleSheet.create({
   image: {
     flex: 1,
     width: '100%',
+  },
+  errorContainer: {
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: '#2C2C2E',
+    marginHorizontal: 20,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    textAlign: 'center',
+    fontSize: 16,
+    fontFamily: 'SpaceMono',
   },
 });
 
